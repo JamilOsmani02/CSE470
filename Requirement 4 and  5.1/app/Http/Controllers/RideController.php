@@ -2,39 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Ride;
 use Illuminate\Http\Request;
+use App\Models\Ride;
 
 class RideController extends Controller
 {
-    public function index()
-    {
-        $user = auth()->user();
-        $upcoming = $user->rides()
-            ->where('ride_time', '>', now())
-            ->where('is_cancelled', false)
-            ->with('reviews.user') 
-            ->get();
-
-        $past = $user->rides()
-            ->where('ride_time', '<=', now())
-            ->with('reviews.user')
-            ->get();
-
-        return view('rides.index', compact('upcoming', 'past'));
-    }
-    
-    public function cancel(Ride $ride)
-    {
-        if ($ride->user_id !== auth()->id()) {
-            abort(403);
-        }
-    
-        $ride->update(['is_cancelled' => true]);
-    
-        return redirect()->route('rides.index')->with('status', 'Ride cancelled.');
-    }
-
     public function create()
     {
         return view('rides.create');
@@ -42,21 +14,54 @@ class RideController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'destination' => 'required|string|max:255',
-            'ride_time' => 'required|date',
-            'details' => 'nullable|string',
+        Ride::create([
+            'user_id' => auth()->id(),
+            'starting_point' => $request->starting_point,
+            'destination' => $request->destination,
+            'ride_time' => $request->ride_time,
+            'seats_available' => $request->seats_available,
+            'cost' => $request->cost,
         ]);
 
-        $ride_time = \Carbon\Carbon::createFromFormat('d/m/Y', $validated['ride_time']);
-
-        $request->user()->rides()->create([
-            'destination' => $validated['destination'],
-            'ride_time' => $validated['ride_time'],
-            'details' => $validated['details'],
-            'is_cancelled' => false,
-        ]);
-
-        return redirect()->route('rides.index')->with('status', 'Ride created successfully!');
+        return redirect()->route('dashboard')->with('success', 'Ride created successfully!');
     }
+    
+    public function search(Request $request)
+    {
+        $rides = Ride::query();
+    
+        // Filter by starting point and destination
+        if ($request->starting_point) {
+            $rides->where('starting_point', 'LIKE', '%' . $request->starting_point . '%');
+        }
+    
+        if ($request->destination) {
+            $rides->where('destination', 'LIKE', '%' . $request->destination . '%');
+        }
+    
+        // Filter by cost (optional)
+        if ($request->cost) {
+            $rides->where('cost', '<=', $request->cost);
+        }
+    
+        // Filter by ride time (optional)
+        if ($request->ride_time) {
+            $rides->where('ride_time', '>=', $request->ride_time);
+        }
+    
+        $rides = $rides->get();
+    
+        return view('rides.search', compact('rides'));
+    }
+    
+    public function history()
+    {
+        $rides = Ride::where('user_id', auth()->id())->get();
+        return view('rides.history', compact('rides'));
+    }
+ 
+
+
+       
+
 }
